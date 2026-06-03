@@ -61,6 +61,15 @@ Flow ALWAYS completes. No skip. No timeout.
 5. Kill switch: 5 consecutive losses → halt day
 6. ORDERFLOW_ENABLED kill switch preserved (off = original behavior)
 
+## Door 0 — Bootstrap / Overall Map (built 2026-06-03)
+Runs once per day BEFORE Door 1. Agent: **Cartographer** (strategic, reads H4/H1 + POI map).
+- Re-anchors the OVERALL IDEOLOGY each cycle (structure→POI→aligned reading, buyer/seller only).
+- WARM START (Idea 3): never enter blind — gathers prior higher-TF + POI map and runs the
+  DIRECTION story engine (gather→narrow→story) the vision wanted for Direction, not just Entry.
+- Produces a **cycle_map**: overall_control, direction, key_pois, 2-4 stories (funnel seed),
+  what_to_watch. Stored in state["cycle_map"], carried forward, seeds Door 1/3/4 via summary().
+- gates/door0_bootstrap.py. run.sh no longer resets to candle 0 (resumes warm).
+
 ## POI Engine (keystone — built 2026-06-03, behind config.POI_ENABLED)
 Persistent, deterministic, NO-LEAK map of Points of Interest across 4H/1H/15m.
 Each POI carries TWO scores (Idea 6 measurement layer):

@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import config
 from prompts import (
     SYSTEM_PROMPT,
+    AGENT0_CARTOGRAPHER,
     AGENT1_H1_COMMANDER,
     AGENT2_M15_SCOUT,
     AGENT3_M5_SNIPER,
@@ -26,6 +27,7 @@ FORBIDDEN = [
 
 # Agent routing — maps agent_id to its system prompt
 AGENT_PROMPTS = {
+    "cartographer": AGENT0_CARTOGRAPHER,
     "h1_commander": AGENT1_H1_COMMANDER,
     "m15_scout":    AGENT2_M15_SCOUT,
     "m5_sniper":    AGENT3_M5_SNIPER,

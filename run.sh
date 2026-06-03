@@ -1,58 +1,44 @@
 #!/bin/bash
-# Overnight runner — continuous batches of 10 trades until you stop it.
-# Each batch resets state and starts fresh from the next candle position.
-# Logs every batch separately to /sdcard/6yearsofpain_logs/
+# Continuous runner — RESUMES from saved state each time (warm-start, Idea 3).
+# Does NOT reset to candle 0: candle_index, cycle_map and accumulated context all
+# carry forward, so each restart continues where the last one stopped.
+# Logs go to logs/ and are copied to /sdcard/6yearsofpain_logs/
 
 cd /root/6yearsofpain17
 
-BATCH=1
-
 echo "================================================"
-echo "  6YEARSOFPAIN — Overnight Runner"
-echo "  Continuous batches of 10 trades"
+echo "  6YEARSOFPAIN — Continuous Runner (warm-start)"
+echo "  Resumes from saved state — no reset"
 echo "  Started: $(date)"
 echo "  Press Ctrl+C to stop"
 echo "================================================"
 
+# To start a fresh run from candle 0:    python main.py --reset
+# To start from the order-flow day:       python3 -c "import state_manager as s; st=s.reset(); st['candle_index']=272; s.save(st)"
+
 while true; do
     echo ""
-    echo "  ══════════════════════════════════════"
-    echo "  BATCH $BATCH — Starting at $(date)"
-    echo "  ══════════════════════════════════════"
+    echo "  ── Resuming at $(date) ──"
 
-    # Reset state for fresh batch
-    python3 -c "import state_manager; state_manager.reset()" 2>/dev/null
-
-    python main.py
+    python main.py        # resumes from state.json candle_index (warm)
     EXIT=$?
 
-    TRADES=$(python3 -c "
+    IDX=$(python3 -c "
 import json
 try:
-    s = json.load(open('state.json'))
-    print(s.get('total_trades', 0))
-except:
-    print(0)
+    s = json.load(open('state.json')); print(s.get('candle_index', 0))
+except: print(0)
 " 2>/dev/null)
 
     echo ""
-    echo "  [Batch $BATCH] Finished — $TRADES trades | Exit: $EXIT | $(date)"
-
-    if [ "$TRADES" -ge "10" ]; then
-        echo "  [Batch $BATCH] COMPLETE — 10 trades done."
-        BATCH=$((BATCH + 1))
-        echo "  Starting Batch $BATCH in 30s..."
-        sleep 30
-        continue
-    fi
+    echo "  [Resumed run] stopped at candle $IDX | Exit: $EXIT | $(date)"
 
     if [ "$EXIT" -ne "0" ]; then
-        echo "  [Batch $BATCH] Crashed — restarting in 15s..."
+        echo "  Crashed — restarting (warm) in 15s..."
         sleep 15
         continue
     fi
 
-    # Clean exit but < 10 trades — data exhausted
-    echo "  [Batch $BATCH] Data exhausted. Waiting 60s and retrying..."
+    echo "  Clean stop (target reached or data exhausted). Waiting 60s then re-checking..."
     sleep 60
 done

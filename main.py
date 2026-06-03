@@ -25,6 +25,7 @@ import claude_client
 from concurrent.futures import ThreadPoolExecutor as _FlowPool
 
 from gates import (
+    door0_bootstrap,
     door1_presession,
     door2_candle,
     door3_tree,
@@ -222,11 +223,23 @@ def _run(args, log_path):
             state_manager.save(state)
             continue
 
+        # ── DOOR 0: Bootstrap / overall map (once per day, warm-start) ────────
+        new_cycle = state.get("door0_day") != current_day
+        if config.POI_ENABLED and new_cycle:
+            try:
+                door0_bootstrap.run(m5_data, idx, _poi_map, state)
+            except Exception as e:
+                print(f"  [SKIP] Door 0 error: {e} — continuing without cycle map")
+            state["door0_day"] = current_day
+        cycle_ctx = door0_bootstrap.summary(state.get("cycle_map", {}))
+        # Warm seed handed to the lower doors: overall map + armed POIs
+        seed_ctx = (cycle_ctx + "\n\n" + poi_ctx) if cycle_ctx else poi_ctx
+
         # ── Pre-session (once per day) ────────────────────────────────────────
         if not state.get("presession_done") or state.get("presession_day") != current_day:
             try:
                 h4c, h1c = data_loader.get_h1_context(m5_data, idx)
-                presession = door1_presession.run(h4c, h1c, poi_ctx)
+                presession = door1_presession.run(h4c, h1c, seed_ctx)
                 state["presession_analysis"] = presession
                 state["presession_done"] = True
                 state["presession_day"] = current_day
@@ -275,7 +288,7 @@ def _run(args, log_path):
         try:
             m15_ctx = data_loader.get_m15_context(m5_data, idx)
             d3 = door3_tree.run(m5, m1_list, recent, d2, state, presession, m15_ctx,
-                                required_conviction=required_conviction, poi_ctx=poi_ctx)
+                                required_conviction=required_conviction, poi_ctx=seed_ctx)
             state["possibility_tree"] = d3.get("branches", [])
         except Exception as e:
             print(f"  [SKIP] Door 3 error: {e}")
@@ -326,7 +339,7 @@ def _run(args, log_path):
                 try:
                     d4 = door4_entry.run(
                         m5, m1_list, recent, signal, d2, d3, state, presession,
-                        required_conviction=required_conviction, poi_ctx=poi_ctx
+                        required_conviction=required_conviction, poi_ctx=seed_ctx
                     )
                     if d4.get("enter") and not d4.get("blocked"):
                         state["active_trade"] = d4["trade"]

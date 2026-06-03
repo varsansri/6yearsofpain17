@@ -237,6 +237,22 @@ def mark_tested(poi_map: list, candle: dict):
 
 
 # ── prompt block — armed POIs in buyer/seller language ──────────────────────────
+def map_block(poi_map: list, price: float, top: int = 10) -> str:
+    """Render the strongest POIs of the whole map (for Door 0's overall picture)."""
+    if not poi_map:
+        return "POINTS OF INTEREST: map empty (not enough history yet)."
+    lines = [f"POINTS OF INTEREST MAP (top {min(top,len(poi_map))} by score, current price {price:.0f}):"]
+    for p in poi_map[:top]:
+        rel = "above" if p["price"] >= price else "below"
+        lines.append(
+            f"  • {p['price']} ({p['side']}, {rel}) | {p['reaction_type']} | "
+            f"structural {p['structural_score']}/10, crowd {p['crowd_score']}/10 | "
+            f"seen on {','.join(p['timeframes'])}"
+        )
+    lines.append("  CLEAN=clean reaction · QUIET=real but unwatched · FIGHT=focal trap/liquidity fight.")
+    return "\n".join(lines)
+
+
 def poi_block(armed: list, price: float) -> str:
     if not armed:
         return "POINTS OF INTEREST: none armed (price not near a mapped level)."

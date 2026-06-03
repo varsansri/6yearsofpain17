@@ -1,0 +1,75 @@
+════════════════════════════════════════════════════════════
+ 6YEARSOFPAIN — SETUP & RUN GUIDE
+════════════════════════════════════════════════════════════
+
+STEP 1: Install dependencies
+  pip install anthropic pandas
+
+STEP 2: Set your API key
+  export ANTHROPIC_API_KEY=sk-ant-xxxxxxxx
+
+STEP 3: Add your candle data
+  Place m5.csv in the data/ folder (see data/README.txt)
+  Optionally add m1.csv, h1.csv, h4.csv
+
+STEP 4: Configure limits (optional)
+  Edit config.py:
+    MAX_TOTAL_TRADES = 20     ← how many trades before stopping
+    MAX_DAILY_TRADES = 3      ← max per day
+    MIN_RR = 1.5              ← minimum risk:reward
+    MIN_SL_PIPS = 30          ← minimum stop loss distance
+    MAX_POI_PIPS = 300        ← max distance to entry level
+    FAST_EXIT_PIPS = 30       ← first candle fast exit threshold
+    PIP_SIZE = 1.0            ← 1.0 for crypto, 0.0001 for forex
+
+STEP 5: Run
+  python main.py              ← start (resumes automatically if stopped)
+  python main.py --reset      ← clear state, start fresh
+  python main.py --report     ← print LEDGER.md
+
+════════════════════════════════════════════════════════════
+ HOW IT WORKS
+════════════════════════════════════════════════════════════
+
+For every M5 candle the code does this — AI cannot change the order:
+
+  DOOR 1 (once/day)   — Pre-session: 12 questions to establish context
+  DOOR 2 (every M5)   — Candle advance: code checks first, then 9 questions
+  DOOR 3 (every M5)   — Possibility tree: 3-4 branches, signals entry if exists
+  DOOR 4 (on signal)  — Entry gate: Bull agent + Bear agent + 14 rules + 10 Qs
+  DOOR 5 (in trade)   — Management: SL/TP check + first candle exit + 4 re-eval
+  DOOR 6 (on close)   — Trade log: 4 post-mortem questions → LEDGER.md
+  DOOR 7 (end of day) — EOD: 5 reflection questions, kill switch check
+  DOOR 8 (end of all) — Session end: 4 session questions + final report
+
+The AI only answers questions. The Python code:
+  - Controls the loop
+  - Checks every hard rule (R:R, SL distance, trade counts, kill switch)
+  - Saves state after EVERY candle (crash = resume exactly where you stopped)
+  - The AI cannot skip a gate, reorder steps, or bypass a block
+
+════════════════════════════════════════════════════════════
+ WHAT THE AI IS FORBIDDEN TO DO
+════════════════════════════════════════════════════════════
+
+The system prompt bans the AI from:
+  - Naming chart patterns (head & shoulders, triangles, flags, etc.)
+  - Naming indicators as signals (RSI, MACD, etc.)
+  - Saying "the trend" instead of buyer/seller control
+  - Saying support/resistance without explaining WHO and WHY
+  - Giving any answer without addressing BOTH buyers AND sellers
+
+Every question forces buyer/seller thinking:
+  "Who attacked?" "Who won?" "Who was trapped?" "What is the intention?"
+  This is hard-wired into the prompts — the AI cannot drift from it.
+
+════════════════════════════════════════════════════════════
+ COST ESTIMATE
+════════════════════════════════════════════════════════════
+
+Model: claude-haiku (cheapest, fast)
+~5 API calls per candle (no trade), ~10 when trade is active
+1 month of BTC M5 = ~8,640 candles = ~43,000 API calls
+Estimated cost: $5-15 for a full month backtest
+
+════════════════════════════════════════════════════════════

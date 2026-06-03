@@ -1,0 +1,18 @@
+# State & logs (regenerated each run)
+state.json
+logs/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS
+.DS_Store
+
+# Large data — keep small order-flow sample, ignore the giant M5/M1 dumps
+data/m5.csv
+data/m1.csv
+run.log

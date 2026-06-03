@@ -1,0 +1,2 @@
+# No packages needed — uses only Python stdlib + claude CLI
+# Python 3.8+ required

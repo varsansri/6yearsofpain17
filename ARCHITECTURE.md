@@ -222,4 +222,5 @@ flowchart LR
 | Min R:R | 1.5 |
 | Data | 100k M5 candles, 288 order-flow bars (2025-06-17) |
 
+See **DOORS.md** for a deep dive on every single door (all questions, all gates, per-door diagrams).
 See **CLAUDE.md** for full file map and run instructions.

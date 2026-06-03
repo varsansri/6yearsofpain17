@@ -36,3 +36,16 @@ CONTEXT_CANDLES = 12
 MIN_POSITION_SIZE    = 0.10   # 10% minimum
 MAX_POSITION_SIZE    = 1.00   # 100% maximum
 DEFAULT_POSITION_SIZE = 0.50  # before any trade history
+
+# ── POI ENGINE (additive keystone — structural + crowd dual scoring) ──────────
+# Mark points of interest across 4H/1H/15m, score each on TWO axes, carry forward.
+POI_ENABLED         = True
+POI_LOOKBACK_DAYS   = 10      # how far back to scan for swings / session levels (bounds cost)
+POI_SWING_K         = 2       # a swing needs K confirmed candles on EACH side (no future leak)
+POI_CLUSTER_PTS     = 120     # levels within this many points are the SAME poi (cross-TF merge)
+POI_ARM_BAND_PTS    = 160     # price within this distance of a poi → poi is "armed" (reaction zone)
+POI_ROUND_BASES     = (1000, 500, 250)  # BTC psychological levels (focal/crowd attention)
+POI_REBUILD_EVERY_HOURS = 1   # rebuild the map each clock hour (vision = hourly cycles)
+# reaction-type thresholds on the 0-10 axes
+POI_HIGH_SCORE      = 6.5      # at/above = "high" on an axis
+POI_LOW_SCORE       = 3.5      # below = "low" on an axis

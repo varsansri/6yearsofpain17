@@ -15,7 +15,8 @@ from prompts import candle_block, context_block, m15_block
 
 def run(m5: dict, m1_list: list, recent_candles: list,
         d2_analysis: dict, state: dict, presession: dict,
-        m15_candles: list = None, required_conviction: float = 7) -> dict:
+        m15_candles: list = None, required_conviction: float = 7,
+        poi_ctx: str = "") -> dict:
 
     display.door_header(3, "POSSIBILITY TREE — M5 SNIPER + M15 SCOUT")
 
@@ -53,8 +54,11 @@ CURRENT CANDLE:
 
 DOOR 2 CANDLE ANALYSIS:
 {d2_summary}
-
+{(chr(10) + poi_ctx + chr(10)) if poi_ctx else ""}
 You are the M5 SNIPER. Build the possibility tree from M5 structure only.
+Anchor your branches to the POINTS OF INTEREST above — that is where buyers/sellers will
+react. Respect the reaction guide: a CLEAN poi favors a clean bounce/rejection branch; a
+FIGHT poi favors a liquidity-grab / trap branch, not a tidy reaction.
 Minimum 3 branches, maximum 4. Always include a counter-intuitive branch.
 Do NOT use pattern names. Think ONLY in buyer/seller behavior with exact prices.
 

@@ -20,6 +20,7 @@ import state_manager
 import display
 import data_loader
 import flow_layer
+import poi_engine
 import claude_client
 from concurrent.futures import ThreadPoolExecutor as _FlowPool
 
@@ -126,6 +127,7 @@ def _run(args, log_path):
     # Per-clock-hour trade tracking (forced ≥1 trade/hour goal — Option A respects the floor)
     cur_hour = None
     hour_count = 0
+    _poi_map = []   # persistent POI map (rebuilt each clock hour)
 
     total_candles = len(m5_data)
 
@@ -164,11 +166,25 @@ def _run(args, log_path):
 
         # Per-clock-hour trade tracking (report ≥1 entry/hour goal)
         this_hour = str(m5["timestamp"])[:13]
-        if cur_hour is not None and this_hour != cur_hour:
+        hour_changed = cur_hour is not None and this_hour != cur_hour
+        if hour_changed:
             tag = "OK" if hour_count >= 1 else "NO TRADE THIS HOUR"
             print(f"\n  [HOUR {cur_hour}:00] entries: {hour_count}  [{tag}]")
             hour_count = 0
+        first_candle = cur_hour is None
         cur_hour = this_hour
+
+        # ── POI ENGINE (additive keystone) — rebuild hourly, arm every candle ──
+        poi_ctx = ""
+        if config.POI_ENABLED:
+            if hour_changed or first_candle or not _poi_map:
+                _poi_map = poi_engine.build_map(m5_data, idx)
+            poi_engine.mark_tested(_poi_map, m5)
+            armed = poi_engine.arm(_poi_map, m5["close"])
+            poi_ctx = poi_engine.poi_block(armed, m5["close"])
+            if armed:
+                print(f"  POI: {len(armed)} armed | nearest {armed[0]['price']} "
+                      f"({armed[0]['side']}, {armed[0]['reaction_type']}, {armed[0]['distance_pts']:.0f}pts)")
 
         start  = max(0, idx - config.CONTEXT_CANDLES)
         recent = [data_loader.candle_to_dict(m5_data[i]) for i in range(start, idx)]
@@ -210,7 +226,7 @@ def _run(args, log_path):
         if not state.get("presession_done") or state.get("presession_day") != current_day:
             try:
                 h4c, h1c = data_loader.get_h1_context(m5_data, idx)
-                presession = door1_presession.run(h4c, h1c)
+                presession = door1_presession.run(h4c, h1c, poi_ctx)
                 state["presession_analysis"] = presession
                 state["presession_done"] = True
                 state["presession_day"] = current_day
@@ -259,7 +275,7 @@ def _run(args, log_path):
         try:
             m15_ctx = data_loader.get_m15_context(m5_data, idx)
             d3 = door3_tree.run(m5, m1_list, recent, d2, state, presession, m15_ctx,
-                                required_conviction=required_conviction)
+                                required_conviction=required_conviction, poi_ctx=poi_ctx)
             state["possibility_tree"] = d3.get("branches", [])
         except Exception as e:
             print(f"  [SKIP] Door 3 error: {e}")
@@ -310,7 +326,7 @@ def _run(args, log_path):
                 try:
                     d4 = door4_entry.run(
                         m5, m1_list, recent, signal, d2, d3, state, presession,
-                        required_conviction=required_conviction
+                        required_conviction=required_conviction, poi_ctx=poi_ctx
                     )
                     if d4.get("enter") and not d4.get("blocked"):
                         state["active_trade"] = d4["trade"]

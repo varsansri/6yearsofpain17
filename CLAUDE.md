@@ -61,6 +61,16 @@ Flow ALWAYS completes. No skip. No timeout.
 5. Kill switch: 5 consecutive losses → halt day
 6. ORDERFLOW_ENABLED kill switch preserved (off = original behavior)
 
+## POI Engine (keystone — built 2026-06-03, behind config.POI_ENABLED)
+Persistent, deterministic, NO-LEAK map of Points of Interest across 4H/1H/15m.
+Each POI carries TWO scores (Idea 6 measurement layer):
+- **structural_score** 0-10 — multi-TF alignment (how many TFs see it) + rejection strength
+- **crowd_score** 0-10 — focal/attention (round numbers, prior day/week H-L) — PURE PYTHON, unfakeable
+Derived **reaction_type**: CLEAN / QUIET / FIGHT / IGNORE (aligned=clean, conflict=FIGHT/liquidity-grab).
+Rebuilt each clock hour, "armed" when price within POI_ARM_BAND_PTS, side flips live vs price.
+Injected as context into Door 1 (direction), Door 3 (tree branches), Door 4 (entry).
+See IDEAS.md (Ideas 1,2,4,6) for the vision. Future-leak fix lives in data_loader._agg_tail.
+
 ## Config Values
 ```python
 ORDERFLOW_ENABLED   = True
@@ -80,6 +90,7 @@ claude_client.py     — ask(), ask_agent(), ask_parallel(), Gemini Flash only
 data_loader.py       — load_orderflow(), build_orderflow_index(), get_orderflow_for_m5(),
                        get_orderflow_context(), aggregate_to_hours(), aggregate_to_m15()
 flow_layer.py        — normalize(), conviction_modifier(), veto(), exit_signal(), build_prompt()
+poi_engine.py        — POI keystone: build_map(), arm(), mark_tested(), poi_block() (dual-scored)
 prompts.py           — all 5 agent system prompts + orderflow_block(), h1_block, m1_block etc.
 build_orderflow.py   — builder: Binance aggTrades → orderflow_5m_YYYY-MM-DD.csv
 gates/

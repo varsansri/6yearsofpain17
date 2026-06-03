@@ -287,4 +287,44 @@ AI must **process data the way we defined.**
 
 ---
 
+## Idea 6 — Dual-score every POI: structural validity + crowd attention (the measurement layer)
+
+**Inspiration — how four domains solved "the others are wrong / unpredictable":**
+- **Quantum mechanics** — stop predicting the exact outcome; map the **probability
+  distribution.** Uncertainty is the output, not a failure.
+- **Game theory** — model the **other players explicitly.** Best move *given what others will
+  do.* Wrong players become **input, not noise.**
+- **Keynesian beauty contest** — **layered thinking.** L0 what's beautiful, L1 what most think is
+  beautiful, L2 what most think most think. Model the crowd's reasoning on top of your answer.
+- **Schelling points** — you **can predict the wrong answer** because focal wrong answers are
+  consistent and repeatable (round numbers attract attention). Map focal points **alongside**
+  correct points and treat **both as real data.**
+
+**Common thread:** none of them tried to make their correct answer *more correct*. They all
+**expanded the model to include crowd behavior as a variable**, not noise.
+
+### What this means for the POI engine (the measurement layer)
+Every POI marker carries **two scores**:
+1. **Structural validity score** — our buyer/seller structural read (is this a real level?).
+2. **Crowd attention score** — how *focal* it is: round numbers, previous session highs/lows,
+   obvious levels even a wrong trader would notice.
+
+**Reaction rule:**
+- **Aligned** (structural ✓ + focal ✓) → **highest conviction**, expect a clean reaction.
+- **Conflict** (one high, one low) → the conflict **is information**: expect a **fight at that
+  level, not a clean reaction.** Trade it differently (don't expect a tidy bounce).
+
+> This is the concrete answer to the "quality metrics / numbers" need from [[Idea 5]] — POIs
+> stop being a single fuzzy label and become a **2-axis measured object**. It also satisfies the
+> "see it through multiple concepts" point from [[Idea 2]]: structural truth AND crowd focal
+> truth, both mapped, neither discarded.
+
+### Implementation note for the POI engine (Task 2)
+- Crowd-attention score is **mostly computable in Python** (round-number proximity, prior
+  session/day H/L, prior week H/L, equal highs/lows) — cheap, deterministic, no AI faking.
+- Structural-validity score comes from the buyer/seller read (multi-TF alignment).
+- Store both on each POI; conviction logic reads the pair (aligned vs conflict).
+
+---
+
 <!-- Next ideas will be appended below -->

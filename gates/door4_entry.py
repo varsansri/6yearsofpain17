@@ -144,7 +144,8 @@ rating: 1-10 (1=very weak bear case, 10=overwhelming seller control)
 
 def run(m5: dict, m1_list: list, recent_candles: list,
         signal: dict, d2_analysis: dict, d3_result: dict,
-        state: dict, presession: dict, required_conviction: float = 7) -> dict:
+        state: dict, presession: dict, required_conviction: float = 7,
+        poi_ctx: str = "") -> dict:
 
     display.door_header(4, "TRADE ENTRY GATE — 5-AGENT CONSENSUS")
 
@@ -229,6 +230,7 @@ M1 Verdict: {m1_verdict} — {d2_analysis.get('m1_reason', '')}
 M15 Read: {d3_result.get('m15_read', {}).get('m15_note', 'N/A')}
 H1 Mandate: {h1_mandate}
 {flow_line}
+{poi_ctx if poi_ctx else "POINTS OF INTEREST: none armed."}
 
 BULL AGENT (rating {bull_data.get('rating')}/10): {str(bull_data.get('bull_case',''))[:250]}
 BEAR AGENT (rating {bear_data.get('rating')}/10): {str(bear_data.get('bear_case',''))[:250]}

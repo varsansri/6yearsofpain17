@@ -11,15 +11,17 @@ import display
 from prompts import h1_block
 
 
-def run(h4_candles: list, h1_candles: list) -> dict:
+def run(h4_candles: list, h1_candles: list, poi_ctx: str = "") -> dict:
     display.door_header(1, "PRE-SESSION — H1 COMMANDER (12 QUESTIONS)")
 
     context = h1_block(h4_candles, h1_candles)
+    poi_section = f"\n{poi_ctx}\n" if poi_ctx else ""
 
     prompt = f"""
 {context}
-
+{poi_section}
 You are the H1 COMMANDER. You read ONLY H4 and H1 data.
+Use the POINTS OF INTEREST above as the map of where buyers/sellers are likely to react.
 Your job is to set the strategic mandate for the session before any M5 candle is seen.
 Answer these 12 questions to establish context, bias, and possible paths.
 

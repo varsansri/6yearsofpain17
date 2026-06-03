@@ -21,6 +21,7 @@ import display
 import data_loader
 import flow_layer
 import poi_engine
+import stage_funnel
 import claude_client
 from concurrent.futures import ThreadPoolExecutor as _FlowPool
 
@@ -187,6 +188,11 @@ def _run(args, log_path):
                 print(f"  POI: {len(armed)} armed | nearest {armed[0]['price']} "
                       f"({armed[0]['side']}, {armed[0]['reaction_type']}, {armed[0]['distance_pts']:.0f}pts)")
 
+        # ── STAGE FUNNEL — which 15-min stage of the hour are we in? ──────────
+        stage_num, stage_name = stage_funnel.stage_of(m5_data[idx]["timestamp"])
+        if config.STAGE_FUNNEL_ENABLED:
+            print(f"  STAGE {stage_num}/4 — {stage_name}")
+
         start  = max(0, idx - config.CONTEXT_CANDLES)
         recent = [data_loader.candle_to_dict(m5_data[i]) for i in range(start, idx)]
 
@@ -287,8 +293,10 @@ def _run(args, log_path):
         # ── DOOR 3: Possibility tree ──────────────────────────────────────────
         try:
             m15_ctx = data_loader.get_m15_context(m5_data, idx)
+            _stage_g = stage_funnel.guidance(stage_num)
+            d3_ctx = (seed_ctx + "\n\n" + _stage_g) if _stage_g else seed_ctx
             d3 = door3_tree.run(m5, m1_list, recent, d2, state, presession, m15_ctx,
-                                required_conviction=required_conviction, poi_ctx=seed_ctx)
+                                required_conviction=required_conviction, poi_ctx=d3_ctx)
             state["possibility_tree"] = d3.get("branches", [])
         except Exception as e:
             print(f"  [SKIP] Door 3 error: {e}")
@@ -332,10 +340,14 @@ def _run(args, log_path):
             except Exception as e:
                 print(f"  [WARN] Door 5 error: {e} — trade remains open")
 
-        # ── DOOR 4: Entry ─────────────────────────────────────────────────────
+        # ── DOOR 4: Entry (only in the COMMIT stage — funnel must narrow first) ─
         elif not state.get("active_trade"):
             signal = d3.get("entry_signal", {})
-            if signal.get("exists") and signal.get("conviction", 0) >= required_conviction:
+            if signal.get("exists") and not stage_funnel.entry_allowed(stage_num):
+                print(f"  Signal held — narrowing (stage {stage_num}/4, entry opens at "
+                      f"stage {config.ENTRY_STAGE})")
+            if (signal.get("exists") and signal.get("conviction", 0) >= required_conviction
+                    and stage_funnel.entry_allowed(stage_num)):
                 try:
                     d4 = door4_entry.run(
                         m5, m1_list, recent, signal, d2, d3, state, presession,

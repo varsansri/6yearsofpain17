@@ -61,6 +61,15 @@ Flow ALWAYS completes. No skip. No timeout.
 5. Kill switch: 5 consecutive losses → halt day
 6. ORDERFLOW_ENABLED kill switch preserved (off = original behavior)
 
+## Stage Funnel (Idea 2 — built 2026-06-03, behind config.STAGE_FUNNEL_ENABLED)
+Each clock hour = 4×15-min stages; the story space narrows stage by stage:
+- Stage 1 (:00-:14) GATHER & NARRATE · Stage 2 (:15-:29) NARROW + ADD-MISSED ·
+  Stage 3 (:30-:44) NARROW HARD · Stage 4 (:45-:59) COMMIT.
+- NEW entries (Door 4) are ONLY attempted in the entry stage (config.ENTRY_STAGE=4).
+  Trade management (Door 5) still runs every candle.
+- stage_funnel.py: stage_of(), entry_allowed(), guidance(). Guidance is appended to
+  Door 3's context so the M5 Sniper narrows per stage. Pure Python, nothing to fake.
+
 ## Door 0 — Bootstrap / Overall Map (built 2026-06-03)
 Runs once per day BEFORE Door 1. Agent: **Cartographer** (strategic, reads H4/H1 + POI map).
 - Re-anchors the OVERALL IDEOLOGY each cycle (structure→POI→aligned reading, buyer/seller only).

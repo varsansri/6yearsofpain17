@@ -49,3 +49,10 @@ POI_REBUILD_EVERY_HOURS = 1   # rebuild the map each clock hour (vision = hourly
 # reaction-type thresholds on the 0-10 axes
 POI_HIGH_SCORE      = 6.5      # at/above = "high" on an axis
 POI_LOW_SCORE       = 3.5      # below = "low" on an axis
+
+# ── STAGE FUNNEL (Idea 2 — narrow the story space across the hour) ────────────
+# Each clock hour = 4 x 15-min stages. Gather & narrate (1) → narrow + add-missed (2)
+# → narrow hard (3) → ENTER (4). New entries are only attempted in the entry stage;
+# trade MANAGEMENT (Door 5) still runs every candle regardless of stage.
+STAGE_FUNNEL_ENABLED = True
+ENTRY_STAGE          = 4       # only open NEW trades in this stage (last 15 min of the hour)

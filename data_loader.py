@@ -141,29 +141,65 @@ def aggregate_to_hours(m5_data: list, hours: int) -> list:
     return result
 
 
-# ── NEW: Dedicated context getters for each agent ────────────────────────────
+# ── NO-LEAK higher-TF context (built backward from the current M5 index) ──────
 
-def get_h1_context(h1_data: list, h4_data: list, current_ts, n: int = 8) -> list:
-    """Return last n H1 candles before current_ts for H1 Commander agent."""
-    if isinstance(current_ts, str):
-        current_ts = _parse_ts(current_ts)
-    h1_candles = []
-    if h1_data:
-        h1_candles = [candle_to_dict(r) for r in h1_data
-                      if r["timestamp"] <= current_ts][-n:]
-    h4_candles = []
-    if h4_data:
-        h4_candles = [candle_to_dict(r) for r in h4_data
-                      if r["timestamp"] <= current_ts][-5:]
-    return h4_candles, h1_candles
+def _agg_tail(m5_data: list, end_idx: int, n: int,
+              hours: int = None, minutes: int = None) -> list:
+    """Aggregate the last n higher-TF candles ENDING at m5_data[end_idx] (inclusive).
+
+    The most recent bucket is the IN-PROGRESS candle — built ONLY from M5 candles
+    up to end_idx. It therefore never contains future data (no look-ahead leak),
+    exactly how a live chart shows the current, not-yet-closed candle.
+
+    Pass either hours (H1=1, H4=4) or minutes (M15=15)."""
+    if not m5_data or end_idx < 0:
+        return []
+
+    def _key(ts):
+        if hours is not None:
+            return ts.replace(hour=(ts.hour // hours) * hours,
+                              minute=0, second=0, microsecond=0)
+        return ts.replace(minute=(ts.minute // minutes) * minutes,
+                          second=0, microsecond=0)
+
+    buckets, cur, i = [], None, min(end_idx, len(m5_data) - 1)
+    while i >= 0:
+        c = m5_data[i]
+        key = _key(c["timestamp"])
+        if cur is not None and key != cur["timestamp"]:
+            buckets.append(cur)
+            cur = None
+            if len(buckets) >= n:
+                break
+        if cur is None:
+            # first candle seen in this bucket (walking backward) is the LATEST → its close
+            cur = {"timestamp": key, "open": c["open"], "high": c["high"],
+                   "low": c["low"], "close": c["close"], "volume": c["volume"]}
+        else:
+            # earlier candle → becomes the open; extend high/low/volume
+            cur["open"]    = c["open"]
+            cur["high"]    = max(cur["high"], c["high"])
+            cur["low"]     = min(cur["low"],  c["low"])
+            cur["volume"] += c["volume"]
+        i -= 1
+    if cur is not None and len(buckets) < n:
+        buckets.append(cur)
+    buckets.reverse()
+    return buckets
 
 
-def get_m15_context(m15_data: list, current_ts, n: int = 12) -> list:
-    """Return last n M15 candles before current_ts for M15 Scout agent."""
-    if isinstance(current_ts, str):
-        current_ts = _parse_ts(current_ts)
-    return [candle_to_dict(r) for r in m15_data
-            if r["timestamp"] <= current_ts][-n:]
+def get_h1_context(m5_data: list, end_idx: int, n: int = 8) -> tuple:
+    """(last 5 H4, last n H1) ending at m5_data[end_idx]. Most recent candle of
+    each is the IN-PROGRESS candle — no future leak."""
+    h4 = _agg_tail(m5_data, end_idx, n=5, hours=4)
+    h1 = _agg_tail(m5_data, end_idx, n=n, hours=1)
+    return [candle_to_dict(c) for c in h4], [candle_to_dict(c) for c in h1]
+
+
+def get_m15_context(m5_data: list, end_idx: int, n: int = 12) -> list:
+    """Last n M15 candles ending at m5_data[end_idx]; most recent is in-progress."""
+    m15 = _agg_tail(m5_data, end_idx, n=n, minutes=15)
+    return [candle_to_dict(c) for c in m15]
 
 
 # ── Existing helpers (untouched) ─────────────────────────────────────────────

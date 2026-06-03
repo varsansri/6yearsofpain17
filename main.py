@@ -104,8 +104,9 @@ def _run(args, log_path):
         state = state_manager.load()
 
     # ── Load data ─────────────────────────────────────────────────────────────
-    m5_data, m1_data, h1_data, h4_data = data_loader.load_data("data")
-    m15_data = data_loader.aggregate_to_m15(m5_data)
+    # H1/H4/M15 are NOT pre-aggregated: context getters build them backward from the
+    # current M5 index so the most recent higher-TF candle is in-progress (no leak).
+    m5_data, m1_data, _h1_unused, _h4_unused = data_loader.load_data("data")
 
     # Index M1 by parent-M5 timestamp once (O(1) per-candle lookup during backtest)
     m1_index = data_loader.build_m1_index(m1_data)
@@ -125,15 +126,6 @@ def _run(args, log_path):
     # Per-clock-hour trade tracking (forced ≥1 trade/hour goal — Option A respects the floor)
     cur_hour = None
     hour_count = 0
-
-    # H1/H4: aggregate from M5 when no dedicated CSV is present.
-    # Derived from M5 itself, so always perfectly aligned (and timezone-agnostic).
-    if not h1_data:
-        h1_data = data_loader.aggregate_to_hours(m5_data, 1)
-        print(f"Aggregated H1 from M5: {len(h1_data)} candles")
-    if not h4_data:
-        h4_data = data_loader.aggregate_to_hours(m5_data, 4)
-        print(f"Aggregated H4 from M5: {len(h4_data)} candles")
 
     total_candles = len(m5_data)
 
@@ -217,7 +209,7 @@ def _run(args, log_path):
         # ── Pre-session (once per day) ────────────────────────────────────────
         if not state.get("presession_done") or state.get("presession_day") != current_day:
             try:
-                h4c, h1c = data_loader.get_h1_context(h1_data, h4_data, m5["timestamp"])
+                h4c, h1c = data_loader.get_h1_context(m5_data, idx)
                 presession = door1_presession.run(h4c, h1c)
                 state["presession_analysis"] = presession
                 state["presession_done"] = True
@@ -265,7 +257,7 @@ def _run(args, log_path):
 
         # ── DOOR 3: Possibility tree ──────────────────────────────────────────
         try:
-            m15_ctx = data_loader.get_m15_context(m15_data, m5["timestamp"])
+            m15_ctx = data_loader.get_m15_context(m5_data, idx)
             d3 = door3_tree.run(m5, m1_list, recent, d2, state, presession, m15_ctx,
                                 required_conviction=required_conviction)
             state["possibility_tree"] = d3.get("branches", [])

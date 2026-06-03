@@ -2,10 +2,14 @@
 
 Open this file on GitHub (phone or desktop) — all diagrams render automatically.
 
-> **The big idea:** one M5 candle enters the top, falls through 8 sequential "doors."
+> **The big idea:** one M5 candle enters the top, falls through sequential "doors."
 > Each door is a gate run by one or more Gemini agents. If a door blocks, the candle
-> is dropped and we move to the next. If it passes all gates, a trade is entered,
-> managed, and logged.
+> is dropped. If it passes all gates, a trade is entered, managed, and logged.
+> Two always-on layers wrap the doors: the **POI engine** (reaction-zone map) and the
+> **stage funnel** (narrow the hour, only enter in stage 4).
+
+**Updated 2026-06-03** — added **Door 0** (Cartographer / warm-start), the **POI engine**
+(dual-scored reaction zones), the **stage funnel**, and fixed the **future-candle leak**.
 
 ---
 
@@ -13,12 +17,15 @@ Open this file on GitHub (phone or desktop) — all diagrams render automaticall
 
 ```mermaid
 flowchart TD
-    DATA[(CSV data\nM5 / M1 / OrderFlow)] --> LOAD[data_loader.py\nload + index]
+    DATA[(CSV data\nM5 / M1 / OrderFlow)] --> LOAD[data_loader.py\nload + index\nNO-LEAK higher-TF]
     LOAD --> MAIN[main.py\nmain candle loop]
 
-    MAIN --> FLOW[[Flow Reader\nbackground thread\nstarts at candle TOP]]
+    POIE[[POI engine\ndual-scored map\nrebuilt hourly]] -.armed POIs.-> MAIN
+    STAGE[[stage funnel\n4x15-min\nentry only stage 4]] -.gates entry.-> MAIN
+    FLOW[[Flow Reader\nbackground thread]] -.veto/boost/exit.-> MAIN
 
-    MAIN --> D1[Door 1\nPre-session]
+    MAIN --> D0[Door 0\nBootstrap / Map\nCartographer]
+    D0 --> D1[Door 1\nPre-session]
     D1 --> D2[Door 2\nCandle Advance]
     D2 --> D3[Door 3\nPossibility Tree]
     D3 --> D4[Door 4\nEntry]
@@ -27,35 +34,35 @@ flowchart TD
     D6 --> D7[Door 7\nEnd of Day]
     D7 --> D8[Door 8\nSession Summary]
 
-    FLOW -.collected after D2.-> D3
-    FLOW -.veto / boost.-> D4
-    FLOW -.forced exit.-> D5
-
+    D0 -.cycle map seeds.-> D1
+    D0 -.cycle map seeds.-> D3
     D6 --> LEDGER[(LEDGER.md)]
     D8 --> LEDGER
 
     classDef door fill:#1f2937,stroke:#60a5fa,color:#fff
     classDef flow fill:#3b1f1f,stroke:#f87171,color:#fff
     classDef store fill:#1f3b2f,stroke:#34d399,color:#fff
-    class D1,D2,D3,D4,D5,D6,D7,D8 door
-    class FLOW flow
+    classDef layer fill:#2a1f3b,stroke:#a78bfa,color:#fff
+    class D0,D1,D2,D3,D4,D5,D6,D7,D8 door
+    class FLOW,POIE,STAGE layer
     class DATA,LEDGER,LOAD store
 ```
 
 ---
 
-## 2. The 8 doors — what each one decides
+## 2. The doors — what each one decides
 
 ```mermaid
 flowchart LR
     subgraph ONCE_PER_DAY
-        D1[Door 1\nPre-session\nH1 Commander sets\nthe daily mandate]
+        D0[Door 0\nDraw the cycle map\nCartographer · warm-start]
+        D1[Door 1\nPre-session\nH1 Commander mandate]
     end
 
     subgraph EVERY_CANDLE
         D2[Door 2\nWho won this candle?\nM5 Sniper + M1 Trigger]
-        D3[Door 3\nBuild possibility tree\n+ conviction score]
-        D4{Door 4\nAll gates pass?\nconviction >= 6?}
+        D3[Door 3\nBuild + NARROW tree\nstage-aware]
+        D4{Door 4\nGates pass + conv >= 6\nAND stage == 4?}
         D5[Door 5\nManage open trade\nSL / TP / early exit]
     end
 
@@ -65,11 +72,33 @@ flowchart LR
         D8[Door 8\nSession summary]
     end
 
-    D1 --> D2 --> D3 --> D4
+    D0 --> D1 --> D2 --> D3 --> D4
     D4 -->|YES enter| D5
-    D4 -->|NO| NEXT[next candle]
+    D4 -->|NO / not stage 4| NEXT[next candle]
     D5 -->|trade closed| D6
     D2 -->|day changed| D7
+```
+
+---
+
+## 2b. The three analytical engines (the vision)
+
+The system is really **three gather→narrow→story engines** + execution, not just an entry machine:
+
+```mermaid
+flowchart TD
+    subgraph DIRECTION[Engine A — DIRECTION]
+        DIR[Door 0 Cartographer + Door 1\nH4/H1 → overall control + stories]
+    end
+    subgraph POI[Engine B — POI · keystone]
+        P[poi_engine.py\n4H/1H/15m → dual-scored reaction zones]
+    end
+    subgraph ENTRY[Engine C — ENTRY]
+        E[Doors 2-4 + stage funnel\n15m→5m→1m + order flow → the trade]
+    end
+    DIR --> POI --> ENTRY
+    POI -.armed zones.-> DIR
+    POI -.armed zones.-> ENTRY
 ```
 
 ---
@@ -80,7 +109,8 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    subgraph AGENTS[5 Gemini Agents]
+    subgraph AGENTS[6 Gemini Agents]
+        A0[Cartographer\nH4/H1+POI → cycle map]
         A1[H1 Commander\nH4+H1 strategic mandate]
         A2[M15 Scout\nM15 momentum trim]
         A3[M5 Sniper\nM5 structure + setup]
@@ -88,6 +118,7 @@ flowchart TD
         A5[Flow Reader\norder-flow real intent]
     end
 
+    A0 --> D0[Door 0]
     A1 --> D1[Door 1]
     A3 --> D2[Door 2]
     A4 --> D2
@@ -101,8 +132,10 @@ flowchart TD
     A5 -.background.-> D5
 
     classDef agent fill:#2a1f3b,stroke:#a78bfa,color:#fff
-    class A1,A2,A3,A4,A5 agent
+    class A0,A1,A2,A3,A4,A5 agent
 ```
+
+> Plus the Bull + Bear debate agents inside Door 4 (use the `default` system prompt).
 
 ---
 
@@ -117,13 +150,15 @@ flowchart LR
     DL -->|candle_to_dict| MAIN[main.py loop]
     DL -->|build_m1_index O1| MAIN
     DL -->|build_orderflow_index O1| MAIN
-    DL -->|aggregate_to_hours| H1H4[H1/H4 in-memory]
-    DL -->|aggregate_to_m15| M15[M15 in-memory]
+    DL -->|_agg_tail NO-LEAK| HTF[H1/H4/M15 in-progress\nbuilt backward from idx]
 
-    H1H4 --> MAIN
-    M15 --> MAIN
+    HTF --> MAIN
+    MAIN --> POIE[poi_engine.py\ndual-scored map]
+    MAIN --> STG[stage_funnel.py\nstage gate]
+    POIE --> MAIN
+    STG --> MAIN
 
-    MAIN --> DOORS[gates/door1..8]
+    MAIN --> DOORS[gates/door0..8]
     DOORS --> CC[claude_client.py\nGemini Flash]
     DOORS --> FL[flow_layer.py\nveto/boost/exit]
     CC --> GEMINI((Gemini 2.5 Flash))
@@ -212,15 +247,17 @@ flowchart LR
 | Thing | Value |
 |---|---|
 | Brain | Gemini 2.5 Flash |
-| Agents | 5 (H1, M15, M5, M1, Flow Reader) |
-| Doors | 8 sequential gates |
+| Agents | 6 (Cartographer, H1, M15, M5, M1, Flow Reader) + Bull/Bear in Door 4 |
+| Doors | Door 0 + 8 gates |
+| Engines | Direction (D0/D1), POI (keystone), Entry (D2-4 + funnel) |
+| POI scores | structural 0-10 + crowd 0-10 → CLEAN/QUIET/FIGHT/IGNORE |
+| Stage funnel | 4×15-min per hour, entry only in stage 4 |
 | Conviction floor | 6 (flow on) / 7 (flow off) |
-| Flow boost / penalty | +2.0 / -2.5 max |
-| Flow veto strength | ≥7 opposing |
-| Max trades | 30 total, 24/day |
-| Kill switch | 5 consecutive losses → day halt |
-| Min R:R | 1.5 |
+| Flow boost / penalty | +2.0 / -2.5 max · veto ≥7 opposing |
+| Max trades | 30 total, 24/day · Kill switch 5 losses · Min R:R 1.5 |
+| Look-ahead | NONE — higher-TF in-progress candle built only up to now |
 | Data | 100k M5 candles, 288 order-flow bars (2025-06-17) |
+| Switches | POI_ENABLED · STAGE_FUNNEL_ENABLED · ORDERFLOW_ENABLED (off = original) |
 
 See **DOORS.md** for a deep dive on every single door (all questions, all gates, per-door diagrams).
 See **CLAUDE.md** for full file map and run instructions.

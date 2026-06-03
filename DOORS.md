@@ -1,12 +1,51 @@
-# 6YEARSOFPAIN — The 8 Doors in Detail
+# 6YEARSOFPAIN — The Doors in Detail
 
 Every door, what it does, which agent runs it, the **exact questions** asked, and
 what passes vs blocks. Open on GitHub — all diagrams render.
 
-> A candle falls through the doors top to bottom. Door 1 runs once per day.
+> A candle falls through the doors top to bottom. **Door 0 + Door 1 run once per day.**
 > Doors 2→5 run every candle. Doors 6→8 fire on events (trade close, day end, session end).
+> Two always-on layers wrap the doors: the **POI engine** (reaction-zone map) and the
+> **stage funnel** (narrow the hour, enter only in stage 4).
 
 **Legend:** 🟢 pass / continue 🔴 block / drop candle 🧠 Gemini agent 🐍 Python-only logic
+
+**Updated 2026-06-03** — added Door 0 (Cartographer), the POI engine, the stage funnel,
+and fixed the future-candle leak. See the new sections at the end.
+
+---
+
+# 🚪 DOOR 0 — BOOTSTRAP / OVERALL MAP
+**Runs:** once per day, BEFORE Door 1 · **Agent:** 🧠 Cartographer · **Reads:** H4 + H1 + POI map
+
+### What it does
+The warm-start gate (Idea 3) and the **Direction story engine** (Idea 2 gap). Before any
+trading, it re-anchors the overall ideology and draws the **cycle map** the whole session
+navigates by — so the session never starts blind. This is the gather→narrow→story process
+applied to Direction, not just Entry.
+
+```mermaid
+flowchart TD
+    HTF[H4 + H1 context\nno-leak] --> CART[🧠 Cartographer]
+    POI[(POI map\ndual-scored)] --> CART
+    PREV[(previous cycle map\ncarried forward)] --> CART
+    CART --> MAP[cycle_map:\noverall_control · direction\nkey_pois · 2-4 stories\nwhat_to_watch]
+    MAP --> STORE[(state.cycle_map\nseeds Door 1/3/4)]
+    classDef a fill:#2a1f3b,stroke:#a78bfa,color:#fff
+    class CART a
+```
+
+### Cartographer output (the cycle map)
+| field | meaning |
+|---|---|
+| overall_control | who controls the macro battle + exact H4/H1 price evidence |
+| direction | BULLISH / BEARISH / NEUTRAL |
+| key_pois | the handful of POIs that matter THIS cycle + who defends them |
+| stories[] | 2-4 possible cycle stories (the funnel seed), incl. one counter-intuitive, each with confirm + invalidate |
+| what_to_watch | the single price that tips which story wins |
+
+**Always passes** — it draws the map, never blocks. Stored in `state["cycle_map"]`,
+carried forward, and its `summary()` seeds Door 1, Door 3, Door 4.
 
 ---
 
@@ -394,6 +433,75 @@ volume, whale prints, POC) — not candle shape.
 | Door 4 | **veto** (Gate 2.5) if opposing strength ≥ 7 + `order_flow_confirms` checklist item |
 | Door 5 | **forced early exit** if tape flips hard against the open trade |
 | Door 6 | logged at entry (verdict/bias/strength) |
+
+---
+
+# 🗺️ Layer: THE POI ENGINE (keystone — `poi_engine.py`)
+Not a door — an always-on layer that feeds Door 0/1/3/4. A **persistent, dual-scored map**
+of reaction zones across 4H/1H/15m. Pure Python, no look-ahead, the AI cannot fake the scores.
+
+```mermaid
+flowchart TD
+    SW[swings on 4H/1H/15m\nno-leak: K confirmed each side] --> CL[🐍 cluster\nmerge levels within 120pts]
+    CL --> S1[🐍 structural_score 0-10\nmulti-TF alignment + rejection]
+    CL --> S2[🐍 crowd_score 0-10\nround #s, prior day/week H-L]
+    S1 --> RT{reaction_type}
+    S2 --> RT
+    RT -->|both high| CLEAN[CLEAN\nclean reaction]
+    RT -->|struct hi, crowd lo| QUIET[QUIET\nreal but unwatched]
+    RT -->|struct lo, crowd hi| FIGHT[FIGHT\nfocal trap / liquidity fight]
+    RT -->|both low| IGN[IGNORE\ndropped]
+    classDef good fill:#1f3b2f,stroke:#34d399,color:#fff
+    class CLEAN good
+```
+
+| field | meaning |
+|---|---|
+| price · side | level; side flips LIVE vs price (broken resistance → support) |
+| structural_score 0-10 | how many timeframes see it + how hard price was rejected |
+| crowd_score 0-10 | focal/attention — round numbers, prior day/week highs-lows (deterministic) |
+| reaction_type | **CLEAN** clean bounce · **QUIET** soft/late · **FIGHT** liquidity grab · IGNORE |
+| timeframes · tested_count · armed · distance_pts | which TFs · times price visited · near-price flag · live distance |
+
+**Lifecycle:** rebuilt each clock hour → `arm()` every candle (flags POIs within 160pts) →
+`mark_tested()` when a candle wicks through. Armed POIs are injected into Door 1/3/4 prompts;
+the full top-N map feeds Door 0.
+
+**Why two scores (Idea 6):** when structural & crowd **align** → highest conviction, clean
+reaction. When they **conflict** → that conflict *is* the signal: a focal-but-weak level is
+where the crowd's stops get hunted (FIGHT), not where price bounces tidily.
+
+---
+
+# ⏳ Layer: THE STAGE FUNNEL (`stage_funnel.py`)
+Each clock hour = **4 × 15-min stages**. The story space narrows stage by stage and a
+**new trade is only opened in stage 4.** Trade *management* runs every candle regardless.
+
+```mermaid
+flowchart LR
+    S1[Stage 1\n:00-:14\nGATHER & NARRATE] --> S2[Stage 2\n:15-:29\nNARROW + ADD-MISSED]
+    S2 --> S3[Stage 3\n:30-:44\nNARROW HARD]
+    S3 --> S4[Stage 4\n:45-:59\nCOMMIT — entry allowed]
+    S1 -.no entry.-> X1[hold]
+    S2 -.no entry.-> X2[hold]
+    S3 -.no entry.-> X3[hold]
+    S4 --> ENTER[🟢 Door 4 may open a trade]
+    classDef good fill:#1f3b2f,stroke:#34d399,color:#fff
+    class ENTER good
+```
+
+- **Stage guidance** is appended to Door 3's prompt so the M5 Sniper acts per stage:
+  gather (1) → narrow + add 2-3 missed (2) → cut hard (3) → commit to the dominant story (4).
+- **Door 4 entry** is gated by `entry_allowed(stage)` — signals found in stages 1-3 are **held**,
+  not taken. The tree is carried forward and narrowed across the hour.
+
+---
+
+# 🔒 Fix: NO FUTURE-CANDLE LEAK (`data_loader._agg_tail`)
+Higher-TF context (H1/H4/M15) is built **backward from the current M5 index**. Closed
+buckets are fully formed; the **most recent bucket is the in-progress candle**, built only
+from M5 up to *now* (its close == current M5 close), exactly like a live chart. No future
+sub-candle ever leaks into the current higher-TF read.
 
 ---
 

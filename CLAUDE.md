@@ -2,15 +2,64 @@
 
 ## What This Is
 Candle-by-candle BTC trading backtester. Gemini 2.5 Flash is the brain.
-8-door sequential gate system. No patterns. Pure buyers vs sellers language.
+Door 0 + 8-door gate system. No patterns. Pure buyers vs sellers language.
+GitHub (public): https://github.com/varsansri/6yearsofpain17 · phone backup: /sdcard/6yearsofpain17_backup/
 
 ## Current State (as of 2026-06-03)
-- **5-agent** multi-timeframe system with Order Flow layer
+- **6-agent** system + 3 analytical engines (Direction, POI, Entry) + stage funnel
 - Gemini Flash via Google account auth (GOOGLE_GENAI_USE_GCA=1)
-- Target: 30 trades total, 24/day max
+- Target: 30 trades total, 24/day max · conviction floor 6 (flow on)
 - M1 data: available and active (M1 Trigger enabled)
-- H1/H4: aggregated in-memory from M5 (always aligned, no timezone issues)
-- Order Flow: active for 2025-06-17 data (288 bars, Binance spot aggTrades IST)
+- H1/H4/M15: built backward from M5 with NO future leak (in-progress candle only up to now)
+- Order Flow: active for 2025-06-17 (288 bars, Binance spot aggTrades IST), 5-min only
+- POI engine + stage funnel + Door 0 warm-start all live (behind config switches)
+
+## ⭐ THE VISION (founder's, captured in IDEAS.md — read it)
+The project is really **3 gather→narrow→story engines + execution**, not just an entry machine:
+1. **DIRECTION** (Door 0 Cartographer + Door 1) — overall picture from higher TFs.
+2. **POI** (poi_engine.py) — THE keystone. Dual-scored reaction zones. POI matters most.
+3. **ENTRY** (Doors 2-4 + stage funnel + order flow) — 15m→5m→1m execution.
+Core rules: structure first → POI → aligned candle reading; top-down; buyer/seller language
+ONLY (no patterns/indicators/"trend"); narrow the story space in stages, act only when narrowed;
+measure quality with numbers but give the AI room to say "unclear" instead of faking (Idea 5).
+IDEAS.md holds Ideas 1-6 verbatim incl. the dual-score measurement layer (Idea 6).
+
+## BUILD HISTORY — 2026-06-03 (this session's major work)
+Diagnosis: the project had drifted — Direction was a once/day text dump, POI barely existed,
+~90% of engineering was in Entry, higher-TF reads leaked the future. Fixed in 4 steps:
+1. **Future-candle leak** → `data_loader._agg_tail` builds higher-TF context BACKWARD from the
+   current M5 idx; most recent candle is in-progress (close==current M5 close). Verified no leak.
+2. **POI engine** (`poi_engine.py`) → persistent dual-scored map (structural + crowd → CLEAN/
+   QUIET/FIGHT/IGNORE), no-leak swings, side flips live, armed near price. Injected into D1/3/4.
+3. **Door 0 + warm-start** (`gates/door0_bootstrap.py`, Cartographer agent) → draws the cycle
+   map (control/direction/key_pois/stories/what_to_watch), seeds D1/3/4; run.sh resumes warm
+   (no candle-0 reset). Gives Direction its own story engine.
+4. **Stage funnel** (`stage_funnel.py`) → hour = 4×15-min; narrow 1→3; Door 4 entry only in
+   stage 4 (Door 5 management every candle).
+All additive behind switches (POI_ENABLED, STAGE_FUNNEL_ENABLED, ORDERFLOW_ENABLED).
+Each shipped as its own git commit + phone backup. Verification run from candle 272 still pending.
+
+## CRITICAL BUG — FIXED 2026-06-03
+Door 4 checklist item `h1_h4_aligned` used to ALWAYS FAIL (no h1/h4 data),
+blocking every trade entry. **Fixed** in `gates/door4_entry.py`:
+
+Pre-verified items (computed in Python, enforced after AI call so Gemini cannot override):
+- `h1_h4_aligned` → True (Gate 2 H1 Commander veto already enforces direction)
+- `m1_trigger_not_abort` → CLEAN/WAIT pass (Gate 3 already blocks ABORT)
+- `trades_today_ok` / `total_trades_ok` → from Gate 1 hard limits
+- `not_news_blackout` → True (no news feed)
+- `order_flow_confirms` → PRE-VERIFIED (opposing flow already vetoed at Gate 2.5)
+
+## 6-Agent Architecture
+| Agent | Timeframe | Role | Where Used |
+|-------|-----------|------|-----------|
+| Cartographer | H4+H1+POI | Draws cycle map, warm-start, Direction story engine | Door 0 |
+| H1 Commander | H4 + H1 | Strategic mandate, veto power | Door 1 |
+| M15 Scout | M15 | Tactical momentum, conviction trim | Door 3 |
+| M5 Sniper | M5 | Structure, setup, entry signal, stage-aware tree | Door 2, 3, 4 |
+| M1 Trigger | M1 | Execution timing, sub-candle reads | Door 2, 4, 5 |
+| Flow Reader | Order Flow | Real intent: delta, absorption, whale, POC | Background thread |
+(+ Bull & Bear debate agents inside Door 4, using the `default` system prompt.)
 
 ## CRITICAL BUG — FIXED 2026-06-03
 Door 4 checklist item `h1_h4_aligned` used to ALWAYS FAIL (no h1/h4 data),
@@ -102,25 +151,27 @@ MAX_TOTAL_TRADES    = 30       # raised from 10
 
 ## File Map
 ```
-main.py              — main loop, TeeLogger, background flow thread, hour tracking
-config.py            — all constants including OF config
-claude_client.py     — ask(), ask_agent(), ask_parallel(), Gemini Flash only
-data_loader.py       — load_orderflow(), build_orderflow_index(), get_orderflow_for_m5(),
-                       get_orderflow_context(), aggregate_to_hours(), aggregate_to_m15()
+main.py              — main loop, TeeLogger, bg flow thread, POI build/arm, stage funnel, Door 0/hour
+config.py            — all constants (OF, POI, stage funnel)
+claude_client.py     — ask(), ask_agent(), ask_parallel(); 6 agents registered incl. cartographer
+data_loader.py       — _agg_tail() NO-LEAK higher-TF, get_h1_context/get_m15_context(m5,idx),
+                       load_orderflow(), build_orderflow_index(), get_orderflow_for_m5/context()
 flow_layer.py        — normalize(), conviction_modifier(), veto(), exit_signal(), build_prompt()
-poi_engine.py        — POI keystone: build_map(), arm(), mark_tested(), poi_block() (dual-scored)
-prompts.py           — all 5 agent system prompts + orderflow_block(), h1_block, m1_block etc.
+poi_engine.py        — POI keystone: build_map/arm/mark_tested/poi_block/map_block (dual-scored)
+stage_funnel.py      — stage_of(), entry_allowed(), guidance() (4×15-min funnel, pure Python)
+prompts.py           — 6 agent system prompts (AGENT0_CARTOGRAPHER..AGENT5_FLOW_READER) + blocks
 build_orderflow.py   — builder: Binance aggTrades → orderflow_5m_YYYY-MM-DD.csv
 gates/
-  door1_presession.py — H1 Commander, 12 questions (H4+H1 focused)
+  door0_bootstrap.py  — Cartographer: cycle map + warm-start + ideology anchor (NEW)
+  door1_presession.py — H1 Commander, 12 questions (H4+H1), takes poi/cycle seed
   door2_candle.py     — M5 Sniper + M1 Trigger parallel (flow handled in main.py)
-  door3_tree.py       — M5 Sniper tree + M15 Scout + flow conviction modifier
-  door4_entry.py      — Gate 2.5 flow veto + Bull+Bear parallel + Half-Kelly sizing
+  door3_tree.py       — M5 Sniper tree + M15 Scout + flow modifier + stage guidance + POI
+  door4_entry.py      — Gate 2.5 flow veto + Bull+Bear + Half-Kelly + POI + stage-gated entry
   door5_management.py — Re-eval + M1 exit + flow forced-exit parallel
   door6_log.py        — logs flow context + post-mortem to LEDGER.md
   door7_eod.py        — end-of-day review
   door8_session.py    — session summary
-run.sh               — overnight auto-restart
+run.sh               — continuous WARM resume (no candle-0 reset)
 logs/                — session logs (also copied to /sdcard/6yearsofpain_logs/)
 ```
 
@@ -176,7 +227,7 @@ ALWAYS: buyer/seller language, specific prices, who won and what followed
 
 ## Known Behavior Notes
 - First 272 candles (2025-06-16) have no order flow — fast, flow skipped cleanly
-- Candle 272 onward (2025-06-17) — full 5-agent mode with flow
+- Candle 272 onward (2025-06-17) — full 6-agent mode with flow + POI + stage funnel
 - Flow Reader overlaps with Doors 2→3; total per-candle time ~50-70s (vs 90s before)
 - Gemini is conservative: high-conviction setup needed. Floor is 6 (not 7) now.
 - run.sh resets to candle 0 each batch — use manual candle_index=272 for flow testing
